@@ -1,0 +1,476 @@
+---
+title: "ASLPrep figures"
+date: "4/18/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+library(mgcv)
+library(visreg)
+library(reshape2)
+library(ggpubr)
+library(ggpattern)
+library(plyr)
+library(ggsignif)
+library(lmerTest)
+library(dplyr)
+library(broom.mixed)
+library(sjPlot)
+library(sjmisc)
+library(sjlabelled)
+library(lme4)
+```
+
+# Creating the figures for the ASLPrep paper
+
+Here we create all the figures with data plotted. The data reflect an
+expanded sample included after the initial revision.
+
+
+```{r load_data}
+
+all_data <- read.csv('CBFData.csv')
+names(all_data)
+table(all_data$Datasets, all_data$CBFTYPE)
+
+all_data = na.omit(all_data)
+all_data = subset(all_data, 
+  (CBF.GM < 120) & 
+  (CBF.GM > 5) & 
+  (CBF.GM / CBF.WM > 1) & 
+  (FD < 1))
+all_data = all_data[!duplicated(all_data),]
+table(all_data$Datasets, all_data$CBFTYPE)
+
+
+# Final demographics
+scbf_only <- subset(all_data, CBFTYPE=="SCBF")
+table(scbf_only$Datasets)
+table(scbf_only$Datasets, scbf_only$sex, useNA="ifany")
+
+ddply(scbf_only, .(Datasets), summarise,
+      mean_age=mean(AGE), sd_age=sd(AGE), 
+      min_age=min(AGE), max_age=max(AGE) )
+
+nrow(scbf_only)
+rm(scbf_only)
+```
+
+
+## Figure 2
+Fig. 2 | ASLPrep quantifies CBF across sequences, scanners and the lifespan. 
+a, CBF in GM and WM for each dataset. Boxes in each violin plot indicate
+interquartile range with the median shown as a white dot. b, GM CBF across the
+lifespan. The thick black line represents the predicted values from a
+generalized additive model; the dashed lines indicate the 95% confidence 
+interval (R2 = 0.50; P = 1.1 × 10−16)
+
+```{r figure2}
+datagm = all_data
+datagm$CBF.WM =NULL
+datagm$TP ='GM'
+datagm$CBF=datagm$CBF.GM 
+datagm$CBF.GM = NULL 
+
+datawm = all_data
+datawm$CBF.GM =NULL
+datawm$TP ='WM'
+datawm$CBF=datawm$CBF.WM  
+datawm$CBF.WM = NULL 
+
+datasets = rbind(datagm,datawm)
+
+datasetsy = datasets[datasets$CBFTYPE =='SCBF',]
+datasetsy = na.omit(datasetsy)
+dodge <- position_dodge(width = 0.5)
+dp <- ggplot(datasetsy, aes(x=Datasets,y=CBF,fill=TP),plot = FALSE) + 
+  geom_violin(position = dodge,width = 1.4)+
+  geom_boxplot(width=.1, outlier.colour=NA, position = dodge) 
+dp=dp + theme_classic() + scale_x_discrete(limits = rev) + 
+  labs(x = "Datasets", y = "CBF(mL/100g/min)") +
+  theme(axis.title.x = element_text(size = rel(1.2))) +
+  theme(axis.title.y = element_text(size = rel(1.2) ,vjust=-0.6)) + ylim(0,140) +
+  theme(axis.text = element_text(size = rel(1.4))) + theme(axis.line = element_line(colour = 'black', size = 0.5)) +
+  scale_fill_manual(values=c("#d95f0e","#756bb1")) + theme(legend.title = element_blank())
+
+datay = all_data[all_data$CBFTYPE =='SCBF',]
+pnc = datay[datay$Datasets=='PNC',]
+nki = datay[datay$Datasets=='NKI',]
+age = datay[datay$Datasets=='AGE',]
+irr = datay[datay$Datasets=='IRR',]
+ftd = datay[datay$Datasets=='FTD',]
+
+#############################################################
+cbf_Age_gam <- gam(CBF.GM ~ s(AGE, k=4) + sex + FD, method="REML", data = datay)
+
+#####################
+## Look at results ##
+#####################
+summary(cbf_Age_gam)
+
+## Nonlinear age effect
+Age_pval <- summary(cbf_Age_gam)$s.table[1,4]
+Age_pval
+
+####################################
+## Visualize Nonlinear Age Effect ##
+####################################
+plotdata <- visreg(cbf_Age_gam,'AGE',type = "conditional",scale = "linear", plot = FALSE)
+smooths <- data.frame(Variable = plotdata$meta$x, 
+                      x=plotdata$fit[[plotdata$meta$x]], 
+                      smooth=plotdata$fit$visregFit, 
+                      lower=plotdata$fit$visregLwr, 
+                      upper=plotdata$fit$visregUpr)
+predicts <- data.frame(Variable = "dim1", 
+                       x=plotdata$res$AGE,
+                       y=plotdata$res$visregRes)
+
+CBF_Age_plot <- ggplot() + xlim(8, 85)+ ylim(0,140) +
+  #theme(legend.position = "none")  +
+  labs(x = "Age (years)", y = "CBF(mL/100g/min)",) +
+  theme(axis.title.x = element_text(size = rel(1.2))) + 
+  theme(axis.title.y = element_blank(),axis.ticks.y = element_blank(),axis.text.y = element_blank()) +
+  theme(axis.text = element_text(size = rel(1.2))) + theme(axis.line = element_line(colour = 'black', size = 0.5), axis.ticks.length = unit(.25, "cm")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank()) +
+  geom_point(data = predicts, aes(x, y), colour = "darksalmon", alpha=0.7 ) +  
+  #geom_point(data=datay,aes(x=AGE, y=CBF.GM),size=1)+ 
+  geom_point(data=pnc,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill='#e34a33', color="white")+ 
+  geom_point(data=nki,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#3182bd", color="white")+ 
+  geom_point(data=irr,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#31a354", color="white")+ 
+  geom_point(data=ftd,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#d95f02", color="white")+ 
+  geom_point(data=age,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#c51b8a", color="white")+ 
+  geom_line(data = smooths, aes(x = x, y = smooth), colour = "midnightblue",size=1) +
+  geom_line(data = smooths, aes(x = x, y=lower), linetype="dashed", colour = "midnightblue", alpha = 0.9, size = 0.9) + 
+  geom_line(data = smooths, aes(x = x, y=upper), linetype="dashed",colour = "midnightblue", alpha = 0.9, size = 0.9) +
+  coord_cartesian(xlim = c(10.5,85), ylim = c(0,140))
+  
+dir.create("Figure2")
+figure <- ggarrange(dp,CBF_Age_plot,
+                    ncol = 2, nrow = 1,widths=c(1.5,1) )
+ggsave("Figure2/Figure2.pdf", width=7, units="in", height=3,dpi=800)
+write.csv(all_data, "Figure2/Figure2Data.csv")
+figure
+
+```
+
+## Extended Data Figure 5
+
+Extended Data Fig. 5 | Bayesian methods mitigate impact of in-scanner motion on CBF image quality.
+The impact of motion on quality differed significantly among quantification approaches (linear mixed effects
+ model, F = 529.13, p = 1.0 × 10−25). The envelope indicates the 95% confidence interval.
+```{r extdatafigure5}
+datay <- subset(all_data, Datasets != 'FTD')
+scbf = datay[datay$CBFTYPE=='SCBF',]
+scrub = datay[datay$CBFTYPE=='SCRUB',]
+basil = datay[datay$CBFTYPE=='BASIL',]
+pvc = datay[datay$CBFTYPE=='PVC',]
+
+cols = c("LINE1"="#e34a33","LINE2"="#3182bd","LINE3"="#d95f02",'LINE4'="#c51b8a")
+
+CBF_Age_plot <- ggplot() + xlim(0, 1.1)+ ylim(0,1.1) +
+  #theme(legend.position = "none")  +
+  
+  theme(axis.title.x = element_text(size = rel(1.2))) +
+  theme(axis.title.y = element_text(size = rel(1.2),vjust=-0.9)) + 
+  theme(axis.text = element_text(size = rel(1.2))) + theme(axis.line = element_line(colour = 'black', size = 0.5), axis.ticks.length = unit(.25, "cm")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank()) +
+  #geom_point(data = predicts, aes(x, y), colour = "darksalmon", alpha=0.7 ) +  
+  geom_point(data=scbf,aes(x=FD, y=QEI),size=1,color="red",alpha = 2/10)+ 
+  geom_point(data=scrub,aes(x=FD, y=QEI),size=1,color="blue",alpha = 2/10)+ 
+  geom_point(data=basil,aes(x=FD, y=QEI),size=1,color='darkgreen',alpha = 2/10)+ 
+  #geom_point(data=pvc,aes(x=FD, y=QEI),size=1,color="#c51b8a")+ 
+
+  geom_smooth(method='lm',data=scbf, aes(x=FD, y=QEI), color="red")+
+  geom_smooth(method='lm',data=scrub,aes(x=FD, y=QEI), color="blue")+
+  geom_smooth(method='lm',data=basil,aes(x=FD, y=QEI), color='darkgreen')+
+  #geom_smooth(method='lm',data=pvc,aes(x=FD, y=QEI), color="#c51b8a") +
+  labs(x = "FD (mm)", y = "QEI",color=cols)+ 
+  scale_colour_manual(values=cols) + 
+  scale_linetype_manual(values=cols) +
+  scale_x_continuous(expand = c(0, 0)) + scale_y_continuous(expand = c(0, 0))
+CBF_Age_plot
+
+dir.create("ExtendedDataFigure5")
+ggsave("ExtendedDataFigure5/ExtendedDataFigure5.pdf", width=5, units="in", height=4,dpi=800)
+write.csv(datay, "ExtendedDataFigure5/ExtendedDataFigure5.csv")
+
+# # do the statistics
+pnc.model <- lmerTest::lmer(QEI ~ FD*CBFTYPE + AGE + sex + FD + (1 | sub ), data=datay)
+
+cat("\nModel summary:\n")
+summary(pnc.model)
+
+cat("\n\nGet the overall interaction signficance using anova: \n")
+anova(pnc.model)
+
+sjPlot::plot_model(pnc.model, colors = "Set1",type = "int",show.data = TRUE) + theme(axis.title.x = element_text(size = rel(1.6))) +
+            theme(axis.title.y = element_text(size = rel(1.6))) +
+            theme(axis.text = element_text(size = rel(1.4))) + theme(axis.line = element_line(colour = 'black', size = 1.5), axis.ticks.length = unit(.25, "cm")) +
+           theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank())  + scale_x_continuous(expand = c(0, 0)) +
+           scale_y_continuous(expand = c(0, 0))
+```
+
+## Extended data figure 6
+
+Extended Data Fig. 6 | CBF of gray and white matter across datasets. The 
+distribution of cerebral blood flow (CBF) within grey matter (GM) and white
+matter (WM) is displayed for each dataset, for each quantification option: 
+the standard CBF model, BASIL (a), BASIL with partial volume correction (PVC;
+b), and SCRUB (c). SCRUB could not be applied for the FTD dataset as an ASL 
+timeseries is required; the sequence used for that study provided only a
+single ∆M image. Boxes within each violin plot indicate interquartile range
+with the median shown as a white dot.
+
+```{r extdatafigure6}
+# CBF GM
+datagm = all_data
+datagm$CBF.WM =NULL
+datagm$TP ='GM'
+datagm$CBF=datagm$CBF.GM 
+datagm$CBF.GM = NULL 
+
+#CBF WM 
+datawm = all_data
+datawm$CBF.GM =NULL
+datawm$TP ='WM'
+datawm$CBF=datawm$CBF.WM  
+datawm$CBF.WM = NULL 
+
+datasets = rbind(datagm,datawm)
+dir.create("ExtendedDataFigure6")
+write.csv(datasets, "ExtendedDataFigure6/ExtendedDataFigure6.csv")
+
+# BASIL
+datasetsy = datasets[datasets$CBFTYPE =='BASIL',]
+datasetsy = na.omit(datasetsy)
+dodge <- position_dodge(width = 0.5)
+basil <- ggplot(datasetsy, aes(x=Datasets,y=CBF,fill=TP),plot = FALSE) + 
+  geom_violin(position = dodge,width = 1.4)+
+  geom_boxplot(width=.1, outlier.colour=NA, position = dodge) 
+basil=basil + theme_classic() + scale_x_discrete(limits = rev) + 
+  labs(x = "Datasets", y = "CBF(mL/100g/min)") +
+  theme(axis.title.x = element_text(size = rel(1.6))) +
+  theme(axis.title.y = element_text(size = rel(1.6),vjust=-0.2)) + ylim(0,140) +
+  theme(axis.text = element_text(size = rel(1.4))) + theme(axis.line = element_line(colour = 'black', size = .5)) +
+  scale_fill_manual(values=c("#d95f0e","#756bb1")) + theme(legend.position = "none")
+
+# BASIL + PVC
+datasetsy = datasets[datasets$CBFTYPE =='PVC',]
+datasetsy = na.omit(datasetsy)
+
+dodge <- position_dodge(width = 0.5)
+pvc<- ggplot(datasetsy, aes(x=Datasets,y=CBF,fill=TP),plot = FALSE) + 
+  geom_violin(position = dodge,width = 1.4)+
+  geom_boxplot(width=.1, outlier.colour=NA, position = dodge) 
+pvc=pvc + theme_classic() + scale_x_discrete(limits = rev) + 
+  labs(x = "Datasets", y = "CBF(mL/100 g/min)") +
+  theme(axis.title.x = element_text(size = rel(1.6))) +
+  theme(axis.title.y = element_text(size = rel(1.6))) + ylim(0,140) +scale_fill_manual(values=c("#d95f0e","#756bb1"))+
+  theme(axis.text = element_text(size = rel(1.4))) + theme(axis.line = element_line(colour = 'black', size = .5)) +
+  theme(axis.title.y = element_blank(),axis.ticks.y = element_blank(),axis.text.y = element_blank()) +
+theme(legend.position = "none")
+
+# SCRUB
+datasetsy = datasets[datasets$CBFTYPE =='SCRUB',]
+datasetsy = na.omit(datasetsy)
+
+dodge <- position_dodge(width = 0.5)
+scrub <- ggplot(datasetsy, aes(x=Datasets,y=CBF,fill=TP),plot = FALSE) + 
+  geom_violin(position = dodge,width = 1.4)+
+  geom_boxplot(width=.1, outlier.colour=NA, position = dodge) 
+scrub=scrub + theme_classic() + scale_x_discrete(limits = rev) + 
+  labs(x = "Datasets", y = "CBF(mL/100 g/min)") +
+  theme(axis.title.x = element_text(size = rel(1.6))) + scale_fill_manual(values=c("#d95f0e","#756bb1"))+
+  theme(axis.title.y = element_text(size = rel(1.6))) + ylim(0,140) +
+  theme(axis.text = element_text(size = rel(1.4))) + theme(axis.line = element_line(colour = 'black', size = .5)) +
+theme(axis.title.y = element_blank(),axis.ticks.y = element_blank(),axis.text.y = element_blank()) +
+theme(legend.position = "none")
+
+# combine the 3
+figure <- ggarrange(basil,pvc,scrub,
+                    ncol = 3, nrow = 1,widths=c(2.5,2,1.5) )
+ggsave("ExtendedDataFigure6/ExtendedDataFigure6.pdf", width=10, units="in", height=3,dpi=800)
+figure
+```
+
+## Extended data figure 7
+Extended Data Fig. 7 | CBF declines nonlinearly with age over the lifespan. 
+Evolution of gray matter CBF with age over the lifespan across all five datasets.
+For each dataset, we used four methods for quantifying CBF: the standard CBF 
+model (see main text), BASIL (a), BASIL with partial volume correction
+(PVC; b), and SCRUB (c). We used a generalized additive model with penalized 
+splines to characterize the nonlinear evolution of CBF over age. The thick
+black line represents the predicted values, while the dashed lines represent 
+the 95% confidence intervals.
+
+```{r extdatafigure7}
+kk = 4 # order
+dir.create("ExtendedDataFigure7")
+write.csv(all_data, "ExtendedDataFigure7/ExtendedDataFigure7.csv")
+
+# BASIL PLOT
+datay = all_data[all_data$CBFTYPE =='BASIL',]
+pnc = datay[datay$Datasets=='PNC',]
+nki = datay[datay$Datasets=='NKI',]
+age = datay[datay$Datasets=='AGE',]
+irr = datay[datay$Datasets=='IRR',]
+ftd = datay[datay$Datasets=='FTD',]
+
+#############################################################
+basil_Age_gam <- gam(CBF.GM ~ AGE + sex + FD + s(AGE, k=kk), method="REML", data = datay)
+
+#####################
+## Look at results ##
+#####################
+#summary(cbf_Age_gam)
+
+## Nonlinear age effect
+Age_pval <- summary(basil_Age_gam)$s.table[1,4]
+Age_pval
+
+####################################
+## Visualize Nonlinear Age Effect ##
+####################################
+plotdata <- visreg(basil_Age_gam,'AGE',type = "conditional",scale = "linear", plot = FALSE)
+smooths <- data.frame(Variable = plotdata$meta$x, 
+                      x=plotdata$fit[[plotdata$meta$x]], 
+                      smooth=plotdata$fit$visregFit, 
+                      lower=plotdata$fit$visregLwr, 
+                      upper=plotdata$fit$visregUpr)
+predicts <- data.frame(Variable = "dim1", 
+                       x=plotdata$res$AGE,
+                       y=plotdata$res$visregRes)
+
+basil_Age_plot <- ggplot() + xlim(8, 85)+ ylim(0,140) +
+  #theme(legend.position = "none")  +
+  labs(x = "Age (years)", y = "CBF(mL/100g/min)") +
+  theme(axis.title.x = element_text(size = rel(1.6))) +
+  theme(axis.title.y = element_text(size = rel(1.6),vjust=-1.2)) + 
+  theme(axis.text = element_text(size = rel(1.4))) + theme(axis.line = element_line(colour = 'black', size = .5), axis.ticks.length = unit(.25, "cm")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank()) +
+  geom_point(data = predicts, aes(x, y), colour = "darksalmon", alpha=0.7 ) +  
+  #geom_point(data=datay,aes(x=AGE, y=CBF.GM),size=1)+ 
+  geom_point(data=pnc,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill='#e34a33', color="white")+ 
+  geom_point(data=nki,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#3182bd", color="white")+ 
+  geom_point(data=irr,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#31a354", color="white")+ 
+  geom_point(data=ftd,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#d95f02", color="white")+ 
+  geom_point(data=age,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#c51b8a", color="white")+ 
+  geom_line(data = smooths, aes(x = x, y = smooth), colour = "midnightblue",size=1) +
+  geom_line(data = smooths, aes(x = x, y=lower), linetype="dashed", colour = "midnightblue", alpha = 0.9, size = 0.9) + 
+  geom_line(data = smooths, aes(x = x, y=upper), linetype="dashed",colour = "midnightblue", alpha = 0.9, size = 0.9) +
+  coord_cartesian(xlim = c(10.5,85), ylim = c(0,140))
+
+# BASIL
+datay = all_data[all_data$CBFTYPE =='PVC',]
+pnc = datay[datay$Datasets=='PNC',]
+nki = datay[datay$Datasets=='NKI',]
+age = datay[datay$Datasets=='AGE',]
+irr = datay[datay$Datasets=='IRR',]
+ftd = datay[datay$Datasets=='FTD',]
+
+#############################################################
+pvc_Age_gam <- gam(CBF.GM ~ AGE + sex + FD + s(AGE, k=kk), method="REML", data = datay)
+
+#####################
+## Look at results ##
+#####################
+#summary(cbf_Age_gam)
+
+## Nonlinear age effect
+Age_pval <- summary(pvc_Age_gam)$s.table[1,4]
+Age_pval
+
+####################################
+## Visualize Nonlinear Age Effect ##
+####################################
+plotdata <- visreg(pvc_Age_gam,'AGE',type = "conditional",scale = "linear", plot = FALSE)
+smooths <- data.frame(Variable = plotdata$meta$x, 
+                      x=plotdata$fit[[plotdata$meta$x]], 
+                      smooth=plotdata$fit$visregFit, 
+                      lower=plotdata$fit$visregLwr, 
+                      upper=plotdata$fit$visregUpr)
+predicts <- data.frame(Variable = "dim1", 
+                       x=plotdata$res$AGE,
+                       y=plotdata$res$visregRes)
+
+pvc_Age_plot <- ggplot() + xlim(8, 85)+ ylim(0,140) +
+  #theme(legend.position = "none")  +
+  labs(x = "Age (years)", y = "CBF(mL/100 g/min)") +
+  theme(axis.title.x = element_text(size = rel(1.6))) +
+  theme(axis.title.y = element_text(size = rel(1.6))) + 
+  theme(axis.text = element_text(size = rel(1.4))) + theme(axis.line = element_line(colour = 'black', size = .5), axis.ticks.length = unit(.25, "cm")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank()) +
+  geom_point(data = predicts, aes(x, y), colour = "darksalmon", alpha=0.7 ) +  
+  #geom_point(data=datay,aes(x=AGE, y=CBF.GM),size=1)+ 
+  geom_point(data=pnc,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill='#e34a33', color="white")+ 
+  geom_point(data=nki,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#3182bd", color="white")+ 
+  geom_point(data=irr,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#31a354", color="white")+ 
+  geom_point(data=ftd,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#d95f02", color="white")+ 
+  geom_point(data=age,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#c51b8a", color="white")+ 
+  geom_line(data = smooths, aes(x = x, y = smooth), colour = "midnightblue",size=1) +
+  geom_line(data = smooths, aes(x = x, y=lower), linetype="dashed", colour = "midnightblue", alpha = 0.9, size = 0.9) + 
+  geom_line(data = smooths, aes(x = x, y=upper), linetype="dashed",colour = "midnightblue", alpha = 0.9, size = 0.9) +
+  coord_cartesian(xlim = c(10.5,85), ylim = c(0,140)) +
+   theme(axis.title.y = element_blank(),axis.ticks.y = element_blank(),axis.text.y = element_blank())
+
+
+# SCRUB
+datay = all_data[all_data$CBFTYPE =='SCRUB',]
+pnc = datay[datay$Datasets=='PNC',]
+nki = datay[datay$Datasets=='NKI',]
+age = datay[datay$Datasets=='AGE',]
+irr = datay[datay$Datasets=='IRR',]
+ftd = datay[datay$Datasets=='FTD',]
+
+#############################################################
+scrub_Age_gam <- gam(CBF.GM ~ AGE + sex + FD + s(AGE, k=kk), method="REML", data = datay)
+
+#####################
+## Look at results ##
+#####################
+#summary(cbf_Age_gam)
+
+## Nonlinear age effect
+Age_pval <- summary(scrub_Age_gam)$s.table[1,4]
+Age_pval
+
+####################################
+## Visualize Nonlinear Age Effect ##
+####################################
+plotdata <- visreg(scrub_Age_gam,'AGE',type = "conditional",scale = "linear", plot = FALSE)
+smooths <- data.frame(Variable = plotdata$meta$x, 
+                      x=plotdata$fit[[plotdata$meta$x]], 
+                      smooth=plotdata$fit$visregFit, 
+                      lower=plotdata$fit$visregLwr, 
+                      upper=plotdata$fit$visregUpr)
+predicts <- data.frame(Variable = "dim1", 
+                       x=plotdata$res$AGE,
+                       y=plotdata$res$visregRes)
+
+scrub_Age_plot <- ggplot() + xlim(8, 85)+ ylim(0,140) +
+  #theme(legend.position = "none")  +
+  labs(x = "Age (years)", y = "CBF(mL/100 g/min)") +
+  theme(axis.title.x = element_text(size = rel(1.6))) +
+  theme(axis.title.y = element_text(size = rel(1.6))) + 
+  theme(axis.text = element_text(size = rel(1.4))) + theme(axis.line = element_line(colour = 'black', size = .5), axis.ticks.length = unit(.25, "cm")) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank()) +
+  geom_point(data = predicts, aes(x, y), colour = "darksalmon", alpha=0.7 ) +  
+  #geom_point(data=datay,aes(x=AGE, y=CBF.GM),size=1)+ 
+  geom_point(data=pnc,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill='#e34a33', color="white")+ 
+  geom_point(data=nki,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#3182bd", color="white")+ 
+  geom_point(data=irr,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#31a354", color="white")+ 
+  #geom_point(data=ftd,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#d95f02", color="white")+ 
+  geom_point(data=age,aes(x=AGE, y=CBF.GM),shape=21,size=2,fill="#c51b8a", color="white")+ 
+  geom_line(data = smooths, aes(x = x, y = smooth), colour = "midnightblue",size=1) +
+  geom_line(data = smooths, aes(x = x, y=lower), linetype="dashed", colour = "midnightblue", alpha = 0.9, size = 0.9) + 
+  geom_line(data = smooths, aes(x = x, y=upper), linetype="dashed",colour = "midnightblue", alpha = 0.9, size = 0.9) +
+  coord_cartesian(xlim = c(10.5,85), ylim = c(0,140)) +
+theme(axis.title.y = element_blank(),axis.ticks.y = element_blank(),axis.text.y = element_blank())
+
+figure <- ggarrange(basil_Age_plot,pvc_Age_plot,scrub_Age_plot,
+                    ncol = 3, nrow = 1,widths=c(2.3,2,2) )
+ggsave("ExtendedDataFigure7/ExtendedDataFigure7.pdf", width=10, units="in", height=4,dpi=800)
+figure
+```
