@@ -104,8 +104,10 @@ SFigure 8
 """
 
 comptimed = pd.read_csv('ExtendedDataFigure8/ExtendedDataFig8.csv')
+comptimed[(comptimed.modality=='anat')&(comptimed['compute time(hrs)']<2)] = np.nan
+
 plt.figure(figsize=(8, 5),dpi=600)
-bb = sns.stripplot(x="Datasets", y='compute_time',hue='modality',data=comptimed,jitter=.2,alpha=.35
+bb = sns.stripplot(x="Datasets", y='compute time(hrs)',hue='modality',data=comptimed,jitter=.2,alpha=.35
                   )
 
 bb.set_xlabel('Datasets',fontsize=20)
