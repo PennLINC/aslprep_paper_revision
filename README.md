@@ -8,3 +8,7 @@ ExtendedData3_4_8.py will recreate Extended Data Figures 3, 4, and 8.
 AllFigures.Rmd will recreate all of the other figures.
 
 In addition, copies of our paper figures, edited in illustrator for style (e.g., font size), are included.
+
+
+This has been tested using R 4.1.2 with an Intel-Mac, and R 4.1.3 for the M1 Mac, in RStudio.
+This has been tested using Python and Python 3.9 with an M1 Mac.
