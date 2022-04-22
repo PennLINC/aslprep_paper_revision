@@ -9,7 +9,7 @@ import matplotlib
 import nilearn.plotting as nip
 import nilearn.image as nim
 from nilearn.masking import apply_mask
-matplotlib.rcParams['pdf.fonttype'] = 42
+# matplotlib.rcParams['pdf.fonttype'] = 42 #for editable pdf figures
 """
 SFigure3
 """
