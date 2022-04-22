@@ -11,4 +11,4 @@ In addition, copies of our paper figures, edited in illustrator for style (e.g.,
 
 
 This has been tested using R 4.1.2 with an Intel-Mac, and R 4.1.3 for the M1 Mac, in RStudio.
-This has been tested using Python and Python 3.9 with an M1 Mac.
+This has been tested using Python 3.8 on an Intel Mac and Python 3.9 on an M1 Mac.
