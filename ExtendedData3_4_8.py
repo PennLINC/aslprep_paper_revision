@@ -26,7 +26,7 @@ df = df.dropna()
 print (pearsonr(df.ASLPrep,df['Previous Pipeline']))
 
 
-print (print (pearsonr(df.ASLPrep,df['Previous Pipeline']))(df.ASLPrep,df['Previous Pipeline']))
+print (scipy.stats.ttest_rel(df.ASLPrep,df['Previous Pipeline']))
 jp.ax_marg_x.grid(False)
 jp.ax_marg_y.grid(False)
 
