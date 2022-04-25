@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 from scipy.stats import pearsonr
+import scipy.stats
 from scipy import stats
 import scipy
 import matplotlib.pylab as plt
@@ -24,6 +25,8 @@ jp = sns.jointplot(y='ASLPrep',x='Previous Pipeline',data=df,xlim=[3,11],ylim=[3
 df = df.dropna()
 print (pearsonr(df.ASLPrep,df['Previous Pipeline']))
 
+
+print (print (pearsonr(df.ASLPrep,df['Previous Pipeline']))(df.ASLPrep,df['Previous Pipeline']))
 jp.ax_marg_x.grid(False)
 jp.ax_marg_y.grid(False)
 
